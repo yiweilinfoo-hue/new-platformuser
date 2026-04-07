@@ -94,20 +94,14 @@ export const Dashboard: React.FC = () => {
   const stats = useMemo(() => {
     const totalPremium = filteredData.reduce((acc, curr) => acc + curr.basePremium, 0);
     
-    // 基础保费赔付 (capped at basePremium)
-    const totalBasePayoutUsed = filteredData.reduce((acc, curr) => {
-      const basePayoutActual = curr.basePremium * curr.baseLossRatio;
-      return acc + Math.min(basePayoutActual, curr.basePremium);
-    }, 0);
+    // 平台SAP赔付
+    const totalSapPayout = filteredData.reduce((acc, curr) => acc + curr.sapPayout, 0);
+    
+    // 平台PMP赔付
+    const totalPmpPayout = filteredData.reduce((acc, curr) => acc + curr.pmpPayout, 0);
 
-    const remainingPremium = totalPremium - totalBasePayoutUsed;
-
-    // 第三方赔付 (商保 + 供应商)
-    const totalThirdPartyPayout = filteredData.reduce((acc, curr) => {
-      return acc + curr.commercialPayout + curr.supplierPayout;
-    }, 0);
-
-    const remainingThirdParty = Math.max(0, totalPremium - totalThirdPartyPayout);
+    // 供应商赔付
+    const totalSupplierPayout = filteredData.reduce((acc, curr) => acc + curr.supplierPayout, 0);
 
     // 地区赔付 (Excess over base premium)
     const totalRegionalPayout = filteredData.reduce((acc, curr) => {
@@ -116,18 +110,17 @@ export const Dashboard: React.FC = () => {
       return acc + excessPayout;
     }, 0);
 
-    // 风险支出总成本 = 基础保费 + 第三方赔付 + 地区赔付
-    const riskExpenditureCost = totalPremium + totalThirdPartyPayout + totalRegionalPayout;
+    // 风险支出总成本 = SAP + PMP + 供应商 + 地区
+    const riskExpenditureCost = totalSapPayout + totalPmpPayout + totalSupplierPayout + totalRegionalPayout;
 
     const filteredRegionCodes = new Set(filteredData.map(d => d.regionCode));
     const totalEvents = MOCK_CLAIMS.filter(c => filteredRegionCodes.has(c.regionCode)).length;
 
     return {
       totalPremium,
-      totalBasePayoutUsed,
-      remainingPremium,
-      totalThirdPartyPayout,
-      remainingThirdParty,
+      totalSapPayout,
+      totalPmpPayout,
+      totalSupplierPayout,
       totalRegionalPayout,
       riskExpenditureCost,
       totalEvents
@@ -136,8 +129,9 @@ export const Dashboard: React.FC = () => {
 
   const costCompositionData = useMemo(() => {
     return [
-      { name: "基础保费", value: stats.totalPremium, color: "#2d5cf6" },
-      { name: "第三方赔付", value: stats.totalThirdPartyPayout, color: "#722ed1" },
+      { name: "平台SAP赔付", value: stats.totalSapPayout, color: "#2d5cf6" },
+      { name: "平台PMP赔付", value: stats.totalPmpPayout, color: "#1890ff" },
+      { name: "第三方赔付", value: stats.totalSupplierPayout, color: "#722ed1" },
       { name: "地区赔付", value: stats.totalRegionalPayout, color: "#f5222d" },
     ];
   }, [stats]);
@@ -151,14 +145,16 @@ export const Dashboard: React.FC = () => {
   }, [filteredData]);
 
   const payoutBreakdown = useMemo(() => {
-    const commercial = filteredData.reduce((acc, curr) => acc + curr.commercialPayout, 0);
+    const sap = filteredData.reduce((acc, curr) => acc + curr.sapPayout, 0);
+    const pmp = filteredData.reduce((acc, curr) => acc + curr.pmpPayout, 0);
     const company = filteredData.reduce((acc, curr) => acc + curr.companyPayout, 0);
     const supplier = filteredData.reduce((acc, curr) => acc + curr.supplierPayout, 0);
     
     return [
-      { name: "商保赔付", value: commercial, color: "#2d5cf6" },
-      { name: "公司赔付", value: company, color: "#60A5FA" },
-      { name: "供应商赔付", value: supplier, color: "#94A3B8" },
+      { name: "平台SAP赔付", value: sap, color: "#2d5cf6" },
+      { name: "平台PMP赔付", value: pmp, color: "#1890ff" },
+      { name: "平台赔付", value: company, color: "#60A5FA" },
+      { name: "第三方赔付", value: supplier, color: "#94A3B8" },
     ];
   }, [filteredData]);
 
@@ -246,73 +242,68 @@ export const Dashboard: React.FC = () => {
               </div>
 
               {/* Level 2: Children Container */}
-              <div className="relative w-full max-w-4xl">
+              <div className="relative w-full max-w-5xl">
                 {/* Horizontal Connector Line - Spans from center of first child to center of last child */}
-                <div className="absolute top-0 left-[16.66%] right-[16.66%] h-[2px] bg-slate-300" />
+                <div className="absolute top-0 left-[12.5%] right-[12.5%] h-[2px] bg-slate-300" />
                 
                 <div className="flex justify-between">
-                  {/* Child 1: Basic Premium */}
-                  <div className="flex flex-col items-center w-1/3 relative">
+                  {/* Child 1: Platform SAP Payout */}
+                  <div className="flex flex-col items-center w-1/4 relative">
                     <div className="w-[2px] h-8 bg-slate-300" />
-                    <div className="w-48 p-3 bg-white border border-blue-200 rounded-sm shadow-sm text-center z-10">
+                    <div className="w-44 p-3 bg-white border border-blue-200 rounded-sm shadow-sm text-center z-10">
                       <div className="flex justify-center items-center gap-1 mb-1">
-                        <span className="text-[10px] font-bold text-slate-500">基础保费</span>
+                        <span className="text-[10px] font-bold text-slate-500">平台SAP赔付</span>
                       </div>
-                      <div className="text-sm font-bold text-slate-900">{formatCurrency(stats.totalPremium)}</div>
-                      
-                      {viewType === ViewType.GROUP ? (
-                        <div className="text-[9px] text-slate-400 mt-1 font-medium">剩余额度: {formatCurrency(stats.remainingPremium)}</div>
-                      ) : (
-                        <div className="mt-2 space-y-1">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[8px] font-bold text-slate-400">
-                              {((stats.totalBasePayoutUsed / stats.totalPremium) * 100).toFixed(0)}%
-                            </span>
-                            <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-blue-600"
-                                style={{ width: `${(stats.totalBasePayoutUsed / stats.totalPremium) * 100}%` }}
-                              />
-                            </div>
-                          </div>
-                          <div className="text-[9px] text-slate-400 font-medium text-left">剩余额度: {formatCurrency(stats.remainingPremium)}</div>
+                      <div className="text-sm font-bold text-slate-900 mb-1">{formatCurrency(stats.totalSapPayout)}</div>
+                      <div className="flex items-center justify-center gap-1">
+                        <span className="text-[8px] font-bold text-slate-400">
+                          {(selectedScenario === Scenario.SCENARIO_1 || selectedScenario === Scenario.SCENARIO_2) ? "100" : Math.min((stats.totalSapPayout / (stats.totalPremium || 1)) * 100, 100).toFixed(0)}%
+                        </span>
+                        <div className="w-16 h-1 bg-slate-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-500"
+                            style={{ width: `${(selectedScenario === Scenario.SCENARIO_1 || selectedScenario === Scenario.SCENARIO_2) ? 100 : Math.min((stats.totalSapPayout / (stats.totalPremium || 1)) * 100, 100)}%` }}
+                          />
                         </div>
-                      )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Child 2: Third Party Payout */}
-                  <div className="flex flex-col items-center w-1/3 relative">
+                  {/* Child 2: Platform PMP Payout */}
+                  <div className="flex flex-col items-center w-1/4 relative">
                     <div className="w-[2px] h-8 bg-slate-300" />
-                    <div className="w-48 p-3 bg-white border border-purple-200 rounded-sm shadow-sm text-center z-10">
+                    <div className="w-44 p-3 bg-white border border-blue-100 rounded-sm shadow-sm text-center z-10">
+                      <div className="flex justify-center items-center gap-1 mb-1">
+                        <span className="text-[10px] font-bold text-slate-500">平台PMP赔付</span>
+                      </div>
+                      <div className="text-sm font-bold text-slate-900">{formatCurrency(stats.totalPmpPayout)}</div>
+                    </div>
+                  </div>
+
+                  {/* Child 3: Third Party Payout */}
+                  <div className="flex flex-col items-center w-1/4 relative">
+                    <div className="w-[2px] h-8 bg-slate-300" />
+                    <div className="w-44 p-3 bg-white border border-purple-200 rounded-sm shadow-sm text-center z-10">
                       <div className="flex justify-center items-center gap-1 mb-1">
                         <span className="text-[10px] font-bold text-slate-500">第三方赔付</span>
                       </div>
-                      <div className="text-sm font-bold text-slate-900">{formatCurrency(stats.totalThirdPartyPayout)}</div>
-                      
-                      {viewType !== ViewType.GROUP && (
-                        <div className="mt-2 space-y-1">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[8px] font-bold text-slate-400">
-                              {((stats.totalThirdPartyPayout / stats.totalPremium) * 100).toFixed(0)}%
-                            </span>
-                            <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-purple-500"
-                                style={{ width: `${(stats.totalThirdPartyPayout / stats.totalPremium) * 100}%` }}
-                              />
-                            </div>
-                          </div>
-                          <div className="text-[9px] text-slate-400 font-medium text-left">剩余额度: {formatCurrency(stats.remainingThirdParty)}</div>
+                      <div className="text-sm font-bold text-slate-900 mb-1">{formatCurrency(stats.totalSupplierPayout)}</div>
+                      <div className="flex items-center justify-center gap-1">
+                        <span className="text-[8px] font-bold text-slate-400">{Math.min((stats.totalSupplierPayout / (stats.totalPremium || 1)) * 100, 100).toFixed(0)}%</span>
+                        <div className="w-16 h-1 bg-slate-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-purple-500"
+                            style={{ width: `${Math.min((stats.totalSupplierPayout / (stats.totalPremium || 1)) * 100, 100)}%` }}
+                          />
                         </div>
-                      )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Child 3: Regional Payout */}
-                  <div className="flex flex-col items-center w-1/3 relative">
+                  {/* Child 4: Regional Payout */}
+                  <div className="flex flex-col items-center w-1/4 relative">
                     <div className="w-[2px] h-8 bg-slate-300" />
-                    <div className="w-48 p-3 bg-white border border-red-200 rounded-sm shadow-sm text-center z-10">
+                    <div className="w-44 p-3 bg-white border border-red-200 rounded-sm shadow-sm text-center z-10">
                       <div className="flex justify-center items-center gap-1 mb-1">
                         <span className="text-[10px] font-bold text-slate-500">地区赔付</span>
                       </div>
@@ -363,9 +354,11 @@ export const Dashboard: React.FC = () => {
                   <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">地区代码</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">地区名称</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-right">基础保费赔付</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-indigo-600 uppercase tracking-wider text-right">平台SAP赔付</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-indigo-600 uppercase tracking-wider text-right">平台PMP赔付</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-slate-700 uppercase tracking-wider text-right bg-slate-50/50">基础外成本总额</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-indigo-600 uppercase tracking-wider text-right">商保赔付</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-indigo-600 uppercase tracking-wider text-right">供应商赔付</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-indigo-600 uppercase tracking-wider text-right">平台赔付</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-red-500 uppercase tracking-wider text-right">地区赔付</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">2026年调优方向</th>
                   <th className="px-4 py-3"></th>
@@ -388,11 +381,14 @@ export const Dashboard: React.FC = () => {
                   const basePayoutActual = item.basePremium * item.baseLossRatio;
                   const basePayoutCapped = Math.min(basePayoutActual, item.basePremium);
                   const excessPayout = Math.max(0, basePayoutActual - item.basePremium);
-                  const insuranceOutsidePayout = item.commercialPayout + item.companyPayout + item.supplierPayout;
+                  const insuranceOutsidePayout = item.sapPayout + item.pmpPayout + item.companyPayout + item.supplierPayout;
                   const totalOutsideCost = excessPayout + insuranceOutsidePayout;
                   const baseUsageRate = Math.min(item.baseLossRatio * 100, 100);
-                  const commercialRate = Math.min((item.commercialPayout / item.basePremium) * 100, 100);
-                  const supplierRate = Math.min((item.supplierPayout / item.basePremium) * 100, 100);
+                  const sapRate = (item.scenario === Scenario.SCENARIO_1 || item.scenario === Scenario.SCENARIO_2)
+                    ? 100
+                    : Math.min((item.sapPayout / (item.basePremium || 1)) * 100, 100);
+                  const supplierRate = Math.min((item.supplierPayout / (item.basePremium || 1)) * 100, 100);
+                  const platformRate = Math.min((item.companyPayout / (item.basePremium || 1)) * 100, 100);
                   
                   return (
                     <tr key={item.id} className="bg-white">
@@ -419,46 +415,35 @@ export const Dashboard: React.FC = () => {
                         <div className="font-bold text-slate-800 text-xs">{item.regionName}</div>
                       </td>
                       <td className="px-4 py-4 text-right">
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="text-xs font-bold text-blue-600">
-                            {formatCurrency(basePayoutCapped)}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[8px] font-bold text-slate-400">{baseUsageRate.toFixed(0)}%</span>
-                            <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
-                              <div 
-                                className={cn(
-                                  "h-full",
-                                  baseUsageRate >= 100 ? "bg-blue-600" : "bg-green-500"
-                                )}
-                                style={{ width: `${baseUsageRate}%` }}
-                              />
-                            </div>
-                          </div>
-                          <div className="text-[8px] text-slate-400 font-medium">剩余: {formatCurrency(Math.max(0, item.basePremium - basePayoutCapped))}</div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-right bg-slate-50/30">
-                        <span className="text-xs font-bold text-slate-800">
-                          {formatCurrency(totalOutsideCost)}
+                        <span className="text-xs font-bold text-blue-600">
+                          {formatCurrency(basePayoutCapped)}
                         </span>
                       </td>
                       <td className="px-4 py-4 text-right">
                         <div className="flex flex-col items-end gap-1">
                           <span className="text-xs font-bold text-indigo-600">
-                            {formatCurrency(item.commercialPayout)}
+                            {formatCurrency(item.sapPayout)}
                           </span>
                           <div className="flex items-center gap-1">
-                            <span className="text-[8px] font-bold text-slate-400">{commercialRate.toFixed(0)}%</span>
+                            <span className="text-[8px] font-bold text-slate-400">{sapRate.toFixed(0)}%</span>
                             <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
                               <div 
                                 className="h-full bg-indigo-500"
-                                style={{ width: `${commercialRate}%` }}
+                                style={{ width: `${sapRate}%` }}
                               />
                             </div>
                           </div>
-                          <div className="text-[8px] text-slate-400 font-medium">剩余: {formatCurrency(Math.max(0, item.basePremium - item.commercialPayout))}</div>
                         </div>
+                      </td>
+                      <td className="px-4 py-4 text-right">
+                        <span className="text-xs font-bold text-indigo-600">
+                          {formatCurrency(item.pmpPayout)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-right bg-slate-50/30">
+                        <span className="text-xs font-bold text-slate-800">
+                          {formatCurrency(totalOutsideCost)}
+                        </span>
                       </td>
                       <td className="px-4 py-4 text-right">
                         <div className="flex flex-col items-end gap-1">
@@ -469,12 +454,27 @@ export const Dashboard: React.FC = () => {
                             <span className="text-[8px] font-bold text-slate-400">{supplierRate.toFixed(0)}%</span>
                             <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
                               <div 
-                                className="h-full bg-slate-400"
+                                className="h-full bg-purple-400"
                                 style={{ width: `${supplierRate}%` }}
                               />
                             </div>
                           </div>
-                          <div className="text-[8px] text-slate-400 font-medium">剩余: {formatCurrency(Math.max(0, item.basePremium - item.supplierPayout))}</div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-right">
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-xs font-bold text-slate-400">
+                            {formatCurrency(item.companyPayout)}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[8px] font-bold text-slate-400">{platformRate.toFixed(0)}%</span>
+                            <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-blue-400"
+                                style={{ width: `${platformRate}%` }}
+                              />
+                            </div>
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-4 text-right">
@@ -512,7 +512,8 @@ export const Dashboard: React.FC = () => {
                   <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">发生时间</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">是否工伤</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-right whitespace-nowrap">社保理赔金额</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-right whitespace-nowrap">商保理赔金额</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-right whitespace-nowrap">平台SAP赔付</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-right whitespace-nowrap">平台PMP赔付</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-right whitespace-nowrap">其他保险理赔</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-orange-600 uppercase tracking-wider text-right whitespace-nowrap">人道主义金额</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-slate-700 uppercase tracking-wider text-right whitespace-nowrap">组织承担金额</th>
@@ -547,7 +548,8 @@ export const Dashboard: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-4 py-4 text-right text-xs font-bold text-blue-600">{formatCurrency(claim.socialSecurityPayout)}</td>
-                      <td className="px-4 py-4 text-right text-xs font-bold text-blue-600">{formatCurrency(claim.commercialInsurancePayout)}</td>
+                      <td className="px-4 py-4 text-right text-xs font-bold text-blue-600">{formatCurrency(claim.sapInsurancePayout)}</td>
+                      <td className="px-4 py-4 text-right text-xs font-bold text-blue-600">{formatCurrency(claim.pmpInsurancePayout)}</td>
                       <td className="px-4 py-4 text-right text-xs font-bold text-blue-600">{formatCurrency(claim.otherInsurancePayout)}</td>
                       <td className="px-4 py-4 text-right text-xs font-bold text-orange-600">{formatCurrency(claim.humanitarianAmount)}</td>
                       <td className="px-4 py-4 text-right text-xs font-bold text-slate-800">{formatCurrency(claim.organizationBearingAmount)}</td>

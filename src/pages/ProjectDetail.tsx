@@ -83,8 +83,12 @@ export const ProjectDetail: React.FC = () => {
             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">赔付明细</h4>
             <div className="space-y-4">
               <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
-                <span className="text-sm font-bold text-slate-600">商保赔付</span>
-                <span className="text-sm font-black text-slate-900">{formatCurrency(project.commercialPayout)}</span>
+                <span className="text-sm font-bold text-slate-600">平台SAP赔付</span>
+                <span className="text-sm font-black text-slate-900">{formatCurrency(project.sapPayout)}</span>
+              </div>
+              <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
+                <span className="text-sm font-bold text-slate-600">平台PMP赔付</span>
+                <span className="text-sm font-black text-slate-900">{formatCurrency(project.pmpPayout)}</span>
               </div>
               <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
                 <span className="text-sm font-bold text-slate-600">公司赔付</span>

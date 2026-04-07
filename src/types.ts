@@ -19,7 +19,8 @@ export interface RegionalData {
   basePremium: number;
   baseLossRatio: number;
   extraCost: number;
-  commercialPayout: number;
+  sapPayout: number;
+  pmpPayout: number;
   companyPayout: number;
   supplierPayout: number;
   totalPayout: number;
@@ -51,7 +52,8 @@ export interface Claim {
   childrenStatus: string;
   parentsStatus: string;
   socialSecurityPayout: number;
-  commercialInsurancePayout: number;
+  sapInsurancePayout: number;
+  pmpInsurancePayout: number;
   otherInsurancePayout: number;
   humanitarianAmount: number;
   organizationBearingAmount: number;
