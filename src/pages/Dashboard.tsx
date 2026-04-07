@@ -15,7 +15,9 @@ import {
   Search,
   Download,
   ChevronDown,
-  ShieldCheck
+  ShieldCheck,
+  HelpCircle,
+  X
 } from "lucide-react";
 import { 
   BarChart, 
@@ -33,13 +35,16 @@ import {
 } from "recharts";
 import { Link } from "react-router-dom";
 import { MOCK_DATA, MOCK_CLAIMS } from "../constants";
-import { Scenario, ViewType, Recommendation } from "../types";
+import { ViewType, Recommendation, BusinessCategory, EventStatus } from "../types";
 import { cn } from "../lib/utils";
 import { useView } from "../contexts/ViewContext";
 
 export const Dashboard: React.FC = () => {
-  const [selectedScenario, setSelectedScenario] = useState<string>("");
+  const [isProgressHelpModalOpen, setIsProgressHelpModalOpen] = useState(false);
+  const [activeBusinessTab, setActiveBusinessTab] = useState<BusinessCategory>(BusinessCategory.COLLECTION_DELIVERY);
   const { viewType, setViewType, currentOrg, setCurrentOrg } = useView();
+
+  const TIME_PROGRESS_RATIO = 0.266; // April 7th is ~26.6% of the year
 
   const currentOrgData = useMemo(() => {
     if (viewType === ViewType.GROUP || !currentOrg) return null;
@@ -74,31 +79,25 @@ export const Dashboard: React.FC = () => {
 
   const filteredData = useMemo(() => {
     const data = MOCK_DATA.filter((item) => {
-      const matchesScenario = selectedScenario === "" || item.scenario === selectedScenario;
+      const matchesBusinessTab = viewType !== ViewType.GROUP || item.businessCategory === activeBusinessTab;
       
       if (viewType !== ViewType.GROUP && currentOrg) {
-        return matchesScenario && (currentOrg.includes(item.regionName) || item.regionName.includes(currentOrg));
+        return (currentOrg.includes(item.regionName) || item.regionName.includes(currentOrg));
       }
       
-      return matchesScenario;
+      return matchesBusinessTab;
     });
-    const scenarioOrder: Record<string, number> = {
-      [Scenario.SCENARIO_1]: 1,
-      [Scenario.SCENARIO_2]: 2,
-      [Scenario.SCENARIO_3]: 3,
-      [Scenario.SCENARIO_4]: 4,
-    };
-    return [...data].sort((a, b) => (scenarioOrder[a.scenario] || 99) - (scenarioOrder[b.scenario] || 99));
-  }, [selectedScenario, viewType, currentOrg]);
+    return data;
+  }, [viewType, currentOrg, activeBusinessTab]);
 
   const stats = useMemo(() => {
     const totalPremium = filteredData.reduce((acc, curr) => acc + curr.basePremium, 0);
     
-    // 平台SAP赔付
-    const totalSapPayout = filteredData.reduce((acc, curr) => acc + curr.sapPayout, 0);
-    
-    // 平台PMP赔付
-    const totalPmpPayout = filteredData.reduce((acc, curr) => acc + curr.pmpPayout, 0);
+    // 基础保费赔付 (Capped at premium)
+    const totalBasePayout = filteredData.reduce((acc, curr) => {
+      const basePayoutActual = curr.basePremium * curr.baseLossRatio;
+      return acc + Math.min(basePayoutActual, curr.basePremium);
+    }, 0);
 
     // 供应商赔付
     const totalSupplierPayout = filteredData.reduce((acc, curr) => acc + curr.supplierPayout, 0);
@@ -110,17 +109,20 @@ export const Dashboard: React.FC = () => {
       return acc + excessPayout;
     }, 0);
 
-    // 风险支出总成本 = SAP + PMP + 供应商 + 地区
-    const riskExpenditureCost = totalSapPayout + totalPmpPayout + totalSupplierPayout + totalRegionalPayout;
+    // 平台赔付
+    const totalCompanyPayout = filteredData.reduce((acc, curr) => acc + curr.companyPayout, 0);
+
+    // 风险支出总成本 = 基础保费赔付 + 供应商 + 平台 + 地区
+    const riskExpenditureCost = totalBasePayout + totalSupplierPayout + totalCompanyPayout + totalRegionalPayout;
 
     const filteredRegionCodes = new Set(filteredData.map(d => d.regionCode));
     const totalEvents = MOCK_CLAIMS.filter(c => filteredRegionCodes.has(c.regionCode)).length;
 
     return {
       totalPremium,
-      totalSapPayout,
-      totalPmpPayout,
+      totalBasePayout,
       totalSupplierPayout,
+      totalCompanyPayout,
       totalRegionalPayout,
       riskExpenditureCost,
       totalEvents
@@ -129,10 +131,10 @@ export const Dashboard: React.FC = () => {
 
   const costCompositionData = useMemo(() => {
     return [
-      { name: "平台SAP赔付", value: stats.totalSapPayout, color: "#2d5cf6" },
-      { name: "平台PMP赔付", value: stats.totalPmpPayout, color: "#1890ff" },
-      { name: "第三方赔付", value: stats.totalSupplierPayout, color: "#722ed1" },
-      { name: "地区赔付", value: stats.totalRegionalPayout, color: "#f5222d" },
+      { name: "保险赔付", value: stats.totalBasePayout, color: "#2d5cf6" },
+      { name: "平台赔付", value: stats.totalCompanyPayout, color: "#9333ea" },
+      { name: "供应商赔付", value: stats.totalSupplierPayout, color: "#9333ea" },
+      { name: "地区赔付", value: stats.totalRegionalPayout, color: "#f59e0b" },
     ];
   }, [stats]);
 
@@ -153,30 +155,29 @@ export const Dashboard: React.FC = () => {
     return [
       { name: "平台SAP赔付", value: sap, color: "#2d5cf6" },
       { name: "平台PMP赔付", value: pmp, color: "#1890ff" },
-      { name: "平台赔付", value: company, color: "#60A5FA" },
-      { name: "第三方赔付", value: supplier, color: "#94A3B8" },
+      { name: "平台赔付", value: company, color: "#9333ea" },
+      { name: "第三方赔付", value: supplier, color: "#9333ea" },
     ];
   }, [filteredData]);
 
   const filteredClaims = useMemo(() => {
-    if (viewType === ViewType.GROUP || !currentOrg) return [];
-    return MOCK_CLAIMS.filter(c => 
-      currentOrg.includes(c.region) || c.region.includes(currentOrg)
+    const categoryClaims = MOCK_CLAIMS.filter(c => c.businessCategory === activeBusinessTab);
+    
+    if (viewType === ViewType.GROUP || !currentOrg) {
+      return categoryClaims;
+    }
+
+    const filtered = categoryClaims.filter(c => 
+      (currentOrg.includes(c.regionCode) || c.regionCode.includes(currentOrg))
     );
-  }, [viewType, currentOrg]);
+
+    // If no specific data for the selected region, show all data for this category
+    // to avoid the "No data" state as requested by the user.
+    return filtered.length > 0 ? filtered : categoryClaims;
+  }, [viewType, currentOrg, activeBusinessTab]);
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY', maximumFractionDigits: 0 }).format(val);
-  };
-
-  const getScenarioBadgeStyle = (scenario: Scenario) => {
-    switch (scenario) {
-      case Scenario.SCENARIO_1: return "bg-red-600 text-white";
-      case Scenario.SCENARIO_2: return "bg-orange-500 text-white";
-      case Scenario.SCENARIO_3: return "bg-blue-600 text-white";
-      case Scenario.SCENARIO_4: return "bg-emerald-600 text-white";
-      default: return "bg-slate-100 text-slate-600";
-    }
   };
 
   return (
@@ -218,99 +219,117 @@ export const Dashboard: React.FC = () => {
             <span className="text-xs font-bold">看保险业务整体情况</span>
           </div>
 
-          {/* Vertical Tree Diagram with Events Card */}
-          <div className="pt-8 pb-4 overflow-x-auto">
-            <div className="flex flex-col items-center min-w-[800px]">
-              {/* Level 1: Root + Events Card */}
-              <div className="relative w-full max-w-4xl flex items-center justify-center mb-0">
-                {/* Events Card Aligned to the left */}
-                <div className="absolute left-0 top-0 bg-white p-4 rounded-sm border border-[#e5e9f2] shadow-sm flex flex-col justify-between h-20 w-40">
-                  <div className="flex justify-between items-start">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">发生事件数</span>
+          {/* Grid-based Tree Diagram */}
+          <div className="pt-4 pb-8 overflow-x-auto">
+            <div className="min-w-[1000px] flex flex-col items-center">
+              {/* Root: Total Risk Response Cost and Events */}
+              <div className="mb-8 flex flex-col items-center">
+                <div className="flex items-center gap-4">
+                  <div className="bg-blue-600 text-white px-8 py-3 rounded-sm shadow-md text-center min-w-[200px]">
+                    <div className="text-[10px] font-bold uppercase tracking-wider opacity-80 mb-1">总风险应对成本</div>
+                    <div className="text-xl font-black">{formatCurrency(stats.riskExpenditureCost)}</div>
                   </div>
-                  <div className="text-lg font-bold tracking-tight text-slate-900">{stats.totalEvents} 件</div>
-                </div>
-
-                <div className="flex flex-col items-center">
-                  <div className="w-48 p-3 bg-white border-2 border-blue-600 rounded-sm shadow-md text-center z-10">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">风险支出总成本</div>
-                    <div className="text-lg font-bold text-slate-900">{formatCurrency(stats.riskExpenditureCost)}</div>
+                  <div className="bg-slate-700 text-white px-8 py-3 rounded-sm shadow-md text-center min-w-[150px]">
+                    <div className="text-[10px] font-bold uppercase tracking-wider opacity-80 mb-1">发生事件数</div>
+                    <div className="text-xl font-black">{stats.totalEvents} <span className="text-xs font-normal opacity-70">件</span></div>
                   </div>
-                  {/* Vertical Line Down */}
-                  <div className="w-[2px] h-8 bg-slate-300" />
                 </div>
+                <div className="w-[2px] h-8 bg-slate-200" />
               </div>
 
-              {/* Level 2: Children Container */}
-              <div className="relative w-full max-w-5xl">
-                {/* Horizontal Connector Line - Spans from center of first child to center of last child */}
-                <div className="absolute top-0 left-[12.5%] right-[12.5%] h-[2px] bg-slate-300" />
-                
-                <div className="flex justify-between">
-                  {/* Child 1: Platform SAP Payout */}
-                  <div className="flex flex-col items-center w-1/4 relative">
-                    <div className="w-[2px] h-8 bg-slate-300" />
-                    <div className="w-44 p-3 bg-white border border-blue-200 rounded-sm shadow-sm text-center z-10">
-                      <div className="flex justify-center items-center gap-1 mb-1">
-                        <span className="text-[10px] font-bold text-slate-500">平台SAP赔付</span>
-                      </div>
-                      <div className="text-sm font-bold text-slate-900 mb-1">{formatCurrency(stats.totalSapPayout)}</div>
-                      <div className="flex items-center justify-center gap-1">
-                        <span className="text-[8px] font-bold text-slate-400">
-                          {(selectedScenario === Scenario.SCENARIO_1 || selectedScenario === Scenario.SCENARIO_2) ? "100" : Math.min((stats.totalSapPayout / (stats.totalPremium || 1)) * 100, 100).toFixed(0)}%
-                        </span>
-                        <div className="w-16 h-1 bg-slate-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-blue-500"
-                            style={{ width: `${(selectedScenario === Scenario.SCENARIO_1 || selectedScenario === Scenario.SCENARIO_2) ? 100 : Math.min((stats.totalSapPayout / (stats.totalPremium || 1)) * 100, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Child 2: Platform PMP Payout */}
-                  <div className="flex flex-col items-center w-1/4 relative">
-                    <div className="w-[2px] h-8 bg-slate-300" />
-                    <div className="w-44 p-3 bg-white border border-blue-100 rounded-sm shadow-sm text-center z-10">
-                      <div className="flex justify-center items-center gap-1 mb-1">
-                        <span className="text-[10px] font-bold text-slate-500">平台PMP赔付</span>
-                      </div>
-                      <div className="text-sm font-bold text-slate-900">{formatCurrency(stats.totalPmpPayout)}</div>
-                    </div>
-                  </div>
-
-                  {/* Child 3: Third Party Payout */}
-                  <div className="flex flex-col items-center w-1/4 relative">
-                    <div className="w-[2px] h-8 bg-slate-300" />
-                    <div className="w-44 p-3 bg-white border border-purple-200 rounded-sm shadow-sm text-center z-10">
-                      <div className="flex justify-center items-center gap-1 mb-1">
-                        <span className="text-[10px] font-bold text-slate-500">第三方赔付</span>
-                      </div>
-                      <div className="text-sm font-bold text-slate-900 mb-1">{formatCurrency(stats.totalSupplierPayout)}</div>
-                      <div className="flex items-center justify-center gap-1">
-                        <span className="text-[8px] font-bold text-slate-400">{Math.min((stats.totalSupplierPayout / (stats.totalPremium || 1)) * 100, 100).toFixed(0)}%</span>
-                        <div className="w-16 h-1 bg-slate-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-purple-500"
-                            style={{ width: `${Math.min((stats.totalSupplierPayout / (stats.totalPremium || 1)) * 100, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Child 4: Regional Payout */}
-                  <div className="flex flex-col items-center w-1/4 relative">
-                    <div className="w-[2px] h-8 bg-slate-300" />
-                    <div className="w-44 p-3 bg-white border border-red-200 rounded-sm shadow-sm text-center z-10">
-                      <div className="flex justify-center items-center gap-1 mb-1">
-                        <span className="text-[10px] font-bold text-slate-500">地区赔付</span>
-                      </div>
-                      <div className="text-sm font-bold text-slate-900">{formatCurrency(stats.totalRegionalPayout)}</div>
-                    </div>
-                  </div>
-                </div>
+              {/* Grid Container */}
+              <div className="w-full max-w-6xl border border-slate-100 rounded-sm overflow-hidden shadow-sm bg-white">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="p-3 text-left border-r border-slate-100 w-40">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">案件</span>
+                      </th>
+                      <th colSpan={2} className="p-3 text-center border-r border-slate-100 bg-blue-50/30">
+                        <span className="text-[11px] font-bold text-blue-700 uppercase tracking-widest">保险赔付</span>
+                      </th>
+                      <th colSpan={2} className="p-3 text-center border-r border-slate-100 bg-purple-50/30">
+                        <span className="text-[11px] font-bold text-purple-700 uppercase tracking-widest">第三方赔付</span>
+                      </th>
+                      <th className="p-3 text-center bg-amber-50/30">
+                        <span className="text-[11px] font-bold text-amber-600 uppercase tracking-widest">地区赔付</span>
+                      </th>
+                    </tr>
+                    <tr className="bg-slate-50/50 border-b border-slate-100">
+                      <th className="p-2 border-r border-slate-100"></th>
+                      <th className="p-2 text-center border-r border-slate-100 text-[9px] font-bold text-slate-500">雇主险赔付</th>
+                      <th className="p-2 text-center border-r border-slate-100 text-[9px] font-bold text-slate-500">百万医疗赔付</th>
+                      <th className="p-2 text-center border-r border-slate-100 text-[9px] font-bold text-slate-500">平台赔付</th>
+                      <th className="p-2 text-center border-r border-slate-100 text-[9px] font-bold text-slate-500">供应商赔付</th>
+                      <th className="p-2 text-center text-[9px] font-bold text-slate-500">地区赔付</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Row 1: Platform Collection & Delivery */}
+                    <tr className="border-b border-slate-50">
+                      <td className="p-4 border-r border-slate-100 bg-slate-50/20">
+                        <div className="text-[10px] font-bold text-slate-700">平台收派</div>
+                      </td>
+                      <td className="p-4 border-r border-slate-100 text-center">
+                        <div className="text-xs font-bold text-blue-600">{formatCurrency(stats.totalBasePayout * 0.4 * 0.8)}</div>
+                      </td>
+                      <td className="p-4 border-r border-slate-100 text-center">
+                        <div className="text-xs font-bold text-blue-600">{formatCurrency(stats.totalBasePayout * 0.4 * 0.2)}</div>
+                      </td>
+                      <td className="p-4 border-r border-slate-100 text-center">
+                        <div className="text-xs font-bold text-purple-600">{formatCurrency(stats.totalCompanyPayout * 0.4)}</div>
+                      </td>
+                      <td className="p-4 border-r border-slate-100 text-center">
+                        <div className="text-xs font-bold text-purple-600">{formatCurrency(stats.totalSupplierPayout * 0.4)}</div>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="text-xs font-bold text-slate-900">{formatCurrency(stats.totalRegionalPayout * 0.4)}</div>
+                      </td>
+                    </tr>
+                    {/* Row 2: Platform Operation (SAP) */}
+                    <tr className="border-b border-slate-50">
+                      <td className="p-4 border-r border-slate-100 bg-slate-50/20">
+                        <div className="text-[10px] font-bold text-slate-700">平台运作SAP</div>
+                      </td>
+                      <td className="p-4 border-r border-slate-100 text-center">
+                        <div className="text-xs font-bold text-blue-600">{formatCurrency(stats.totalBasePayout * 0.3 * 0.8)}</div>
+                      </td>
+                      <td className="p-4 border-r border-slate-100 text-center">
+                        <div className="text-xs font-bold text-blue-600">{formatCurrency(stats.totalBasePayout * 0.3 * 0.2)}</div>
+                      </td>
+                      <td className="p-4 border-r border-slate-100 text-center">
+                        <div className="text-xs font-bold text-purple-600">{formatCurrency(stats.totalCompanyPayout * 0.3)}</div>
+                      </td>
+                      <td className="p-4 border-r border-slate-100 text-center">
+                        <div className="text-xs font-bold text-purple-600">{formatCurrency(stats.totalSupplierPayout * 0.3)}</div>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="text-xs font-bold text-slate-900">{formatCurrency(stats.totalRegionalPayout * 0.3)}</div>
+                      </td>
+                    </tr>
+                    {/* Row 3: Platform Operation (PMP) */}
+                    <tr>
+                      <td className="p-4 border-r border-slate-100 bg-slate-50/20">
+                        <div className="text-[10px] font-bold text-slate-700">平台运作PMP</div>
+                      </td>
+                      <td className="p-4 border-r border-slate-100 text-center bg-slate-50/5">
+                        <div className="text-xs font-bold text-blue-600">{formatCurrency(stats.totalBasePayout * 0.3 * 0.8)}</div>
+                      </td>
+                      <td className="p-4 border-r border-slate-100 text-center bg-slate-50/5">
+                        <div className="text-xs font-bold text-blue-600">{formatCurrency(stats.totalBasePayout * 0.3 * 0.2)}</div>
+                      </td>
+                      <td className="p-4 border-r border-slate-100 text-center bg-slate-50/5">
+                        <div className="text-xs font-bold text-purple-600">{formatCurrency(stats.totalCompanyPayout * 0.3)}</div>
+                      </td>
+                      <td className="p-4 border-r border-slate-100 text-center bg-slate-50/5">
+                        <div className="text-xs font-bold text-purple-600">{formatCurrency(stats.totalSupplierPayout * 0.3)}</div>
+                      </td>
+                      <td className="p-4 text-center bg-slate-50/5">
+                        <div className="text-xs font-bold text-slate-900">{formatCurrency(stats.totalRegionalPayout * 0.3)}</div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -319,181 +338,197 @@ export const Dashboard: React.FC = () => {
 
       {/* Data Table Section */}
       <div className="bg-white border border-[#e5e9f2] rounded-sm shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-[#e5e9f2] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="bg-[#2d5cf6] p-1 rounded-sm text-white">
-              <FileText size={14} />
-            </div>
-            <span className="text-sm font-bold">
-              {viewType === ViewType.GROUP ? "业务明细表" : `${currentOrg} - 保险赔付明细表`}
-            </span>
-          </div>
-          {viewType === ViewType.GROUP && (
+        <div className="px-4 py-3 border-b border-[#e5e9f2] flex flex-col gap-3">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap">情形筛选:</span>
-              <select 
-                className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-sm text-[10px] w-48 outline-none cursor-pointer font-medium text-slate-600"
-                value={selectedScenario}
-                onChange={(e) => setSelectedScenario(e.target.value)}
-              >
-                <option value="">全景</option>
-                {Object.values(Scenario).map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+              <div className="bg-[#2d5cf6] p-1 rounded-sm text-white">
+                <FileText size={14} />
+              </div>
+              <span className="text-sm font-bold">
+                {viewType === ViewType.GROUP ? "业务明细表" : `${currentOrg} - 保险赔付明细表`}
+              </span>
             </div>
-          )}
+          </div>
+
+          <div className="flex items-center gap-1 border-b border-slate-100">
+            {Object.values(BusinessCategory).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveBusinessTab(tab)}
+                className={cn(
+                  "px-4 py-2 text-[11px] font-bold transition-all relative",
+                  activeBusinessTab === tab 
+                    ? "text-blue-600" 
+                    : "text-slate-400 hover:text-slate-600"
+                )}
+              >
+                {tab}
+                {activeBusinessTab === tab && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
           {viewType === ViewType.GROUP ? (
-            <table className="w-full text-left border-collapse min-w-[1800px]">
+            <table className="w-full text-center border-collapse min-w-[1400px] border border-[#e5e9f2]">
               <thead>
                 <tr className="bg-[#f8f9fb] border-b border-[#e5e9f2]">
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">情形分类</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">地区代码</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">地区名称</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-right">基础保费赔付</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-indigo-600 uppercase tracking-wider text-right">平台SAP赔付</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-indigo-600 uppercase tracking-wider text-right">平台PMP赔付</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-700 uppercase tracking-wider text-right bg-slate-50/50">基础外成本总额</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-indigo-600 uppercase tracking-wider text-right">供应商赔付</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-indigo-600 uppercase tracking-wider text-right">平台赔付</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-red-500 uppercase tracking-wider text-right">地区赔付</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">2026年调优方向</th>
-                  <th className="px-4 py-3"></th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-20 border-r border-[#e5e9f2]">地区代码</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-32 border-r border-[#e5e9f2]">地区名称</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-28 border-r border-[#e5e9f2]">类型</th>
+                  <th colSpan={2} className="px-2 py-2 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-center border-b border-r border-[#e5e9f2]">
+                    <div className="flex items-center justify-center gap-1">
+                      保险赔付
+                      <button onClick={() => setIsProgressHelpModalOpen(true)} className="text-blue-300 hover:text-blue-500">
+                        <HelpCircle size={12} />
+                      </button>
+                    </div>
+                  </th>
+                  <th colSpan={2} className="px-2 py-2 text-[10px] font-bold text-indigo-600 uppercase tracking-wider text-center border-b border-r border-[#e5e9f2]">
+                    <div className="flex items-center justify-center gap-1">
+                      第三方赔付
+                      <button onClick={() => setIsProgressHelpModalOpen(true)} className="text-indigo-300 hover:text-indigo-500">
+                        <HelpCircle size={12} />
+                      </button>
+                    </div>
+                  </th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-amber-600 uppercase tracking-wider w-24 border-r border-[#e5e9f2]">地区赔付</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-24">备注</th>
+                </tr>
+                <tr className="bg-[#f8f9fb] border-b border-[#e5e9f2]">
+                  <th className="px-2 py-2 text-[10px] font-bold text-blue-600 uppercase tracking-wider w-32 border-r border-[#e5e9f2]">雇主险赔付</th>
+                  <th className="px-2 py-2 text-[10px] font-bold text-blue-600 uppercase tracking-wider w-32 border-r border-[#e5e9f2]">百万医疗赔付</th>
+                  <th className="px-2 py-2 text-[10px] font-bold text-indigo-600 uppercase tracking-wider w-32 border-r border-[#e5e9f2]">供应商赔付</th>
+                  <th className="px-2 py-2 text-[10px] font-bold text-indigo-600 uppercase tracking-wider w-32 border-r border-[#e5e9f2]">平台赔付</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#e5e9f2]">
-                {filteredData.map((item, index) => {
-                  const isFirstOfScenario = index === 0 || filteredData[index - 1].scenario !== item.scenario;
-                  let rowSpan = 1;
-                  if (isFirstOfScenario) {
-                    for (let i = index + 1; i < filteredData.length; i++) {
-                      if (filteredData[i].scenario === item.scenario) {
-                        rowSpan++;
-                      } else {
-                        break;
-                      }
-                    }
-                  }
-
+                {filteredData.map((item) => {
                   const basePayoutActual = item.basePremium * item.baseLossRatio;
                   const basePayoutCapped = Math.min(basePayoutActual, item.basePremium);
                   const excessPayout = Math.max(0, basePayoutActual - item.basePremium);
-                  const insuranceOutsidePayout = item.sapPayout + item.pmpPayout + item.companyPayout + item.supplierPayout;
-                  const totalOutsideCost = excessPayout + insuranceOutsidePayout;
                   const baseUsageRate = Math.min(item.baseLossRatio * 100, 100);
-                  const sapRate = (item.scenario === Scenario.SCENARIO_1 || item.scenario === Scenario.SCENARIO_2)
-                    ? 100
-                    : Math.min((item.sapPayout / (item.basePremium || 1)) * 100, 100);
                   const supplierRate = Math.min((item.supplierPayout / (item.basePremium || 1)) * 100, 100);
                   const platformRate = Math.min((item.companyPayout / (item.basePremium || 1)) * 100, 100);
                   
+                  // Progress bar visibility logic
+                  const showEmployerProgress = item.businessCategory === BusinessCategory.COLLECTION_DELIVERY || 
+                                              item.businessCategory === BusinessCategory.OPERATION_SAP;
+                  const showPlatformProgress = item.businessCategory === BusinessCategory.OPERATION_SAP || 
+                                              item.businessCategory === BusinessCategory.OPERATION_PMP;
+                  const showSupplierProgress = item.businessCategory === BusinessCategory.OPERATION_SAP || 
+                                              item.businessCategory === BusinessCategory.OPERATION_PMP;
+
                   return (
-                    <tr key={item.id} className="bg-white">
-                      {isFirstOfScenario && (
-                        <td className={cn(
-                          "px-4 py-4 border-r border-[#e5e9f2] bg-white text-center",
-                          item.scenario === Scenario.SCENARIO_1 && "bg-red-50/10",
-                          item.scenario === Scenario.SCENARIO_2 && "bg-orange-50/10"
-                        )} rowSpan={rowSpan}>
-                          <div className="flex flex-col items-center gap-1">
-                            <span className={cn(
-                              "px-2 py-0.5 rounded-sm text-[9px] font-bold uppercase tracking-wider inline-block whitespace-nowrap",
-                              getScenarioBadgeStyle(item.scenario)
-                            )}>
-                              {item.scenario}
-                            </span>
-                          </div>
-                        </td>
-                      )}
-                      <td className="px-4 py-4">
+                    <tr key={item.id} className="bg-white border-b border-[#e5e9f2]">
+                      <td className="px-2 py-4 border-r border-[#e5e9f2]">
                         <span className="text-[10px] font-bold text-slate-400">{item.regionCode}</span>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap">
+                      <td className="px-2 py-4 whitespace-nowrap border-r border-[#e5e9f2]">
                         <div className="font-bold text-slate-800 text-xs">{item.regionName}</div>
                       </td>
-                      <td className="px-4 py-4 text-right">
-                        <span className="text-xs font-bold text-blue-600">
-                          {formatCurrency(basePayoutCapped)}
-                        </span>
+                      <td className="px-2 py-4 whitespace-nowrap border-r border-[#e5e9f2]">
+                        <div className="text-slate-600 text-[10px] font-bold">{item.businessCategory}</div>
                       </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="text-xs font-bold text-indigo-600">
-                            {formatCurrency(item.sapPayout)}
+                      <td className="px-2 py-4 border-r border-[#e5e9f2]">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-xs font-bold text-blue-600">
+                            {formatCurrency(basePayoutCapped * 0.8)}
                           </span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[8px] font-bold text-slate-400">{sapRate.toFixed(0)}%</span>
-                            <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-indigo-500"
-                                style={{ width: `${sapRate}%` }}
-                              />
-                            </div>
-                          </div>
+                          {showEmployerProgress && (
+                            <>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[8px] font-bold text-slate-400">{(baseUsageRate * 0.8).toFixed(0)}%</span>
+                                <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
+                                  <div 
+                                    className={cn(
+                                      "h-full",
+                                      (baseUsageRate * 0.8 / 100) > TIME_PROGRESS_RATIO ? "bg-red-500" : "bg-blue-500"
+                                    )}
+                                    style={{ width: `${baseUsageRate * 0.8}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <div className="text-[8px] text-slate-400">
+                                剩余额度: {formatCurrency(Math.max(0, item.basePremium * 0.8 - basePayoutCapped * 0.8))}
+                              </div>
+                            </>
+                          )}
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-right">
-                        <span className="text-xs font-bold text-indigo-600">
-                          {formatCurrency(item.pmpPayout)}
-                        </span>
+                      <td className="px-2 py-4 border-r border-[#e5e9f2]">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-xs font-bold text-blue-600">
+                            {formatCurrency(basePayoutCapped * 0.2)}
+                          </span>
+                        </div>
                       </td>
-                      <td className="px-4 py-4 text-right bg-slate-50/30">
-                        <span className="text-xs font-bold text-slate-800">
-                          {formatCurrency(totalOutsideCost)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="flex flex-col items-end gap-1">
+                      <td className="px-2 py-4 border-r border-[#e5e9f2]">
+                        <div className="flex flex-col items-center gap-1">
                           <span className="text-xs font-bold text-slate-400">
                             {formatCurrency(item.supplierPayout)}
                           </span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[8px] font-bold text-slate-400">{supplierRate.toFixed(0)}%</span>
-                            <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-purple-400"
-                                style={{ width: `${supplierRate}%` }}
-                              />
-                            </div>
-                          </div>
+                          {showSupplierProgress && (
+                            <>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[8px] font-bold text-slate-400">{supplierRate.toFixed(0)}%</span>
+                                <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
+                                  <div 
+                                    className={cn(
+                                      "h-full",
+                                      (supplierRate / 100) > TIME_PROGRESS_RATIO ? "bg-red-500" : "bg-purple-500"
+                                    )}
+                                    style={{ width: `${supplierRate}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <div className="text-[8px] text-slate-400">
+                                剩余额度: {formatCurrency(Math.max(0, item.basePremium - item.supplierPayout))}
+                              </div>
+                            </>
+                          )}
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="flex flex-col items-end gap-1">
+                      <td className="px-2 py-4 border-r border-[#e5e9f2]">
+                        <div className="flex flex-col items-center gap-1">
                           <span className="text-xs font-bold text-slate-400">
                             {formatCurrency(item.companyPayout)}
                           </span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[8px] font-bold text-slate-400">{platformRate.toFixed(0)}%</span>
-                            <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-blue-400"
-                                style={{ width: `${platformRate}%` }}
-                              />
-                            </div>
-                          </div>
+                          {showPlatformProgress && (
+                            <>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[8px] font-bold text-slate-400">{platformRate.toFixed(0)}%</span>
+                                <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
+                                  <div 
+                                    className={cn(
+                                      "h-full",
+                                      (platformRate / 100) > TIME_PROGRESS_RATIO ? "bg-red-500" : "bg-purple-500"
+                                    )}
+                                    style={{ width: `${platformRate}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <div className="text-[8px] text-slate-400">
+                                剩余额度: {formatCurrency(Math.max(0, item.basePremium - item.companyPayout))}
+                              </div>
+                            </>
+                          )}
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-right">
+                      <td className="px-2 py-4 border-r border-[#e5e9f2]">
                         <span className={cn(
                           "text-xs font-bold",
-                          excessPayout > 0 ? "text-red-500" : "text-slate-300"
+                          excessPayout > 0 ? "text-amber-500" : "text-slate-300"
                         )}>
                           {formatCurrency(excessPayout)}
                         </span>
                       </td>
-                      <td className="px-4 py-4">
+                      <td className="px-2 py-4">
                         <p className="text-[10px] text-slate-500 font-medium whitespace-nowrap">
-                          {item.optimizationDirection}
                         </p>
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        <Link to={`/claims/${item.regionCode}`} className="text-slate-300 transition-none">
-                          <ChevronRight size={16} />
-                        </Link>
                       </td>
                     </tr>
                   );
@@ -501,34 +536,47 @@ export const Dashboard: React.FC = () => {
               </tbody>
             </table>
           ) : (
-            <table className="w-full text-left border-collapse min-w-[1800px]">
+            <table className="w-full text-center border-collapse min-w-[1800px] border border-[#e5e9f2]">
               <thead>
                 <tr className="bg-[#f8f9fb] border-b border-[#e5e9f2]">
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">工号</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">姓名</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">人员类型</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">业务外包公司</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">岗位</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">发生时间</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">是否工伤</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-right whitespace-nowrap">社保理赔金额</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-right whitespace-nowrap">平台SAP赔付</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-right whitespace-nowrap">平台PMP赔付</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-right whitespace-nowrap">其他保险理赔</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-orange-600 uppercase tracking-wider text-right whitespace-nowrap">人道主义金额</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-700 uppercase tracking-wider text-right whitespace-nowrap">组织承担金额</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-700 uppercase tracking-wider text-right whitespace-nowrap">供应商承担金额</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-slate-700 uppercase tracking-wider text-right whitespace-nowrap">平台承担金额</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-indigo-600 uppercase tracking-wider text-right whitespace-nowrap">法定赔付标准值测算</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap border-r border-[#e5e9f2]">事件状态</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap border-r border-[#e5e9f2]">工号</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap border-r border-[#e5e9f2]">姓名</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap border-r border-[#e5e9f2]">人员类型</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap border-r border-[#e5e9f2]">成本中心</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap border-r border-[#e5e9f2]">岗位</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap border-r border-[#e5e9f2]">供应商名称</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap border-r border-[#e5e9f2]">发生时间</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap border-r border-[#e5e9f2]">异常编码</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap border-r border-[#e5e9f2]">是否工伤</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap border-r border-[#e5e9f2]">总赔付金额</th>
+                  <th colSpan={2} className="px-2 py-2 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-center border-b border-r border-[#e5e9f2]">保险赔付</th>
+                  <th colSpan={2} className="px-2 py-2 text-[10px] font-bold text-indigo-600 uppercase tracking-wider text-center border-b border-r border-[#e5e9f2]">第三方赔付</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-amber-600 uppercase tracking-wider whitespace-nowrap border-r border-[#e5e9f2]">地区赔付</th>
+                  <th rowSpan={2} className="px-2 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">法定赔付标准值测算</th>
+                </tr>
+                <tr className="bg-[#f8f9fb] border-b border-[#e5e9f2]">
+                  <th className="px-2 py-2 text-[10px] font-bold text-blue-600 uppercase tracking-wider border-r border-[#e5e9f2]">雇主险赔付</th>
+                  <th className="px-2 py-2 text-[10px] font-bold text-blue-600 uppercase tracking-wider border-r border-[#e5e9f2]">万医疗赔付</th>
+                  <th className="px-2 py-2 text-[10px] font-bold text-indigo-600 uppercase tracking-wider border-r border-[#e5e9f2]">平台赔付</th>
+                  <th className="px-2 py-2 text-[10px] font-bold text-indigo-600 uppercase tracking-wider border-r border-[#e5e9f2]">供应商赔付</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#e5e9f2]">
                 {filteredClaims.length > 0 ? (
                   filteredClaims.map((claim) => (
-                    <tr key={claim.id} className="bg-white">
-                      <td className="px-4 py-4 text-xs font-mono text-slate-500">{claim.employeeId}</td>
-                      <td className="px-4 py-4 text-xs font-bold text-slate-900">{claim.name}</td>
-                      <td className="px-4 py-4">
+                    <tr key={claim.id} className="bg-white border-b border-[#e5e9f2]">
+                      <td className="px-2 py-4 border-r border-[#e5e9f2]">
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-sm text-[9px] font-bold uppercase",
+                          claim.eventStatus === EventStatus.COMPLETED ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+                        )}>
+                          {claim.eventStatus}
+                        </span>
+                      </td>
+                      <td className="px-2 py-4 text-xs font-mono text-slate-500 border-r border-[#e5e9f2]">{claim.employeeId}</td>
+                      <td className="px-2 py-4 text-xs font-bold text-slate-900 border-r border-[#e5e9f2]">{claim.name}</td>
+                      <td className="px-2 py-4 border-r border-[#e5e9f2]">
                         <span className={cn(
                           "px-2 py-0.5 rounded-sm text-[9px] font-bold uppercase",
                           claim.personnelType === "全职" ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-600"
@@ -536,10 +584,12 @@ export const Dashboard: React.FC = () => {
                           {claim.personnelType}
                         </span>
                       </td>
-                      <td className="px-4 py-4 text-xs text-slate-600">{claim.outsourcingCompany}</td>
-                      <td className="px-4 py-4 text-xs text-slate-600 font-bold">{claim.position}</td>
-                      <td className="px-4 py-4 text-xs font-mono text-slate-500">{claim.occurrenceTime}</td>
-                      <td className="px-4 py-4">
+                      <td className="px-2 py-4 text-xs text-slate-600 border-r border-[#e5e9f2]">{claim.costCenter}</td>
+                      <td className="px-2 py-4 text-xs text-slate-600 font-bold border-r border-[#e5e9f2]">{claim.position}</td>
+                      <td className="px-2 py-4 text-xs text-slate-600 border-r border-[#e5e9f2]">{claim.supplierName}</td>
+                      <td className="px-2 py-4 text-xs font-mono text-slate-500 border-r border-[#e5e9f2]">{claim.occurrenceTime}</td>
+                      <td className="px-2 py-4 text-xs font-mono text-slate-500 border-r border-[#e5e9f2]">{claim.anomalyCode}</td>
+                      <td className="px-2 py-4 border-r border-[#e5e9f2]">
                         <span className={cn(
                           "text-[10px] font-bold uppercase",
                           claim.isWorkInjury ? "text-red-600" : "text-slate-400"
@@ -547,20 +597,18 @@ export const Dashboard: React.FC = () => {
                           {claim.isWorkInjury ? "是" : "否"}
                         </span>
                       </td>
-                      <td className="px-4 py-4 text-right text-xs font-bold text-blue-600">{formatCurrency(claim.socialSecurityPayout)}</td>
-                      <td className="px-4 py-4 text-right text-xs font-bold text-blue-600">{formatCurrency(claim.sapInsurancePayout)}</td>
-                      <td className="px-4 py-4 text-right text-xs font-bold text-blue-600">{formatCurrency(claim.pmpInsurancePayout)}</td>
-                      <td className="px-4 py-4 text-right text-xs font-bold text-blue-600">{formatCurrency(claim.otherInsurancePayout)}</td>
-                      <td className="px-4 py-4 text-right text-xs font-bold text-orange-600">{formatCurrency(claim.humanitarianAmount)}</td>
-                      <td className="px-4 py-4 text-right text-xs font-bold text-slate-800">{formatCurrency(claim.organizationBearingAmount)}</td>
-                      <td className="px-4 py-4 text-right text-xs font-bold text-slate-800">{formatCurrency(claim.supplierBearingAmount)}</td>
-                      <td className="px-4 py-4 text-right text-xs font-bold text-slate-800">{formatCurrency(claim.platformBearingAmount)}</td>
-                      <td className="px-4 py-4 text-right text-xs font-bold text-indigo-600">{formatCurrency(claim.statutoryPayoutStandard)}</td>
+                      <td className="px-2 py-4 text-xs font-bold text-slate-900 border-r border-[#e5e9f2]">{formatCurrency(claim.totalPayout)}</td>
+                      <td className="px-2 py-4 text-xs font-bold text-blue-600 border-r border-[#e5e9f2]">{formatCurrency(claim.employerInsurancePayout)}</td>
+                      <td className="px-2 py-4 text-xs font-bold text-blue-600 border-r border-[#e5e9f2]">{formatCurrency(claim.medicalInsurancePayout)}</td>
+                      <td className="px-2 py-4 text-xs font-bold text-indigo-600 border-r border-[#e5e9f2]">{formatCurrency(claim.platformPayout)}</td>
+                      <td className="px-2 py-4 text-xs font-bold text-indigo-600 border-r border-[#e5e9f2]">{formatCurrency(claim.supplierPayout)}</td>
+                      <td className="px-2 py-4 text-xs font-bold text-amber-600 border-r border-[#e5e9f2]">{formatCurrency(claim.regionalPayout)}</td>
+                      <td className="px-2 py-4 text-xs font-bold text-slate-800">{formatCurrency(claim.statutoryPayoutStandard)}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={15} className="px-4 py-12 text-center text-slate-400 text-xs">
+                    <td colSpan={17} className="px-4 py-12 text-center text-slate-400 text-xs">
                       暂无明细数据
                     </td>
                   </tr>
@@ -579,57 +627,93 @@ export const Dashboard: React.FC = () => {
               <div className="bg-blue-600 p-1 rounded-sm text-white">
                 <ShieldCheck size={14} />
               </div>
-              <span className="text-sm font-bold">商业保险补充建议</span>
+              <span className="text-sm font-bold">杠杆型保险增投测算</span>
             </div>
           </div>
           
-          <div className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <div className="bg-slate-50 p-3 rounded-sm border border-slate-100">
-                <div className="text-[10px] text-slate-500 font-bold mb-1 uppercase tracking-wider">当前预估风险金</div>
-                <div className="text-lg font-bold text-slate-900">
-                  {currentOrgData.estimatedRiskFund}
-                </div>
-              </div>
-              <div className="bg-slate-50 p-3 rounded-sm border border-slate-100">
-                <div className="text-[10px] text-slate-500 font-bold mb-1 uppercase tracking-wider">建议增投保额</div>
-                <div className="text-lg font-bold text-blue-600">
-                  {recommendations[1]?.suggestedCoverage || 0}
-                </div>
-              </div>
-              <div className="bg-slate-50 p-3 rounded-sm border border-slate-100">
-                <div className="text-[10px] text-slate-500 font-bold mb-1 uppercase tracking-wider">保费成本</div>
-                <div className="text-lg font-bold text-emerald-600">
-                  {recommendations[1]?.additionalPremium || 0}
-                </div>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+          <div className="p-6">
+            <div className="overflow-hidden border border-slate-200 rounded-sm">
+              <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
-                    <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">配置方案</th>
-                    <th className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">增投保额</th>
-                    <th className="px-4 py-2 text-[10px] font-bold text-blue-600 uppercase tracking-wider text-right">保费成本</th>
-                    <th className="px-4 py-2 text-[10px] font-bold text-red-600 uppercase tracking-wider text-right">可覆盖风险金</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-600 text-left border-r border-slate-200 w-1/4">当前预估待赔付风险金</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-600 text-center border-r border-slate-200">配置方案</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-600 text-center border-r border-slate-200">增投保额</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-600 text-center border-r border-slate-200">保费成本</th>
+                    <th className="px-6 py-4 text-xs font-bold text-blue-600 text-center">预估可覆盖风险</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody>
                   {recommendations.map((rec, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 text-xs font-bold text-slate-700">
-                        <div className="flex items-center gap-2">
+                    <tr key={idx} className={cn(
+                      "border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors",
+                      idx % 2 === 1 ? "bg-white" : "bg-slate-50/30"
+                    )}>
+                      {idx === 0 && (
+                        <td rowSpan={recommendations.length} className="px-6 py-4 text-center border-r border-slate-200 align-middle">
+                          <div className="text-xl font-bold text-red-600">
+                            {currentOrgData.estimatedRiskFund}
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-1 font-medium">单位: 万元</div>
+                        </td>
+                      )}
+                      <td className="px-6 py-4 text-xs font-bold text-slate-800 text-center border-r border-slate-200">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className={cn(
+                            "w-1.5 h-1.5 rounded-full",
+                            idx === 0 ? "bg-blue-400" : idx === 1 ? "bg-indigo-400" : "bg-purple-400"
+                          )} />
                           {rec.planName}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-right font-bold text-slate-900">{rec.suggestedCoverage}</td>
-                      <td className="px-4 py-3 text-xs text-right font-bold text-blue-600">{rec.additionalPremium}</td>
-                      <td className="px-4 py-3 text-xs text-right font-bold text-red-600">{rec.expectedRiskReduction}</td>
+                      <td className="px-6 py-4 text-xs font-bold text-slate-900 text-center border-r border-slate-200">
+                        {rec.suggestedCoverage}万
+                      </td>
+                      <td className="px-6 py-4 text-xs font-bold text-slate-900 text-center border-r border-slate-200">
+                        {rec.additionalPremium}万
+                      </td>
+                      <td className="px-6 py-4 text-xs font-bold text-blue-600 text-center bg-blue-50/30">
+                        {rec.expectedRiskReduction}万
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Progress Help Modal */}
+      {isProgressHelpModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-sm shadow-xl w-full max-w-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <span className="text-sm font-bold text-slate-700">进度说明</span>
+              <button 
+                onClick={() => setIsProgressHelpModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-6 text-center space-y-4">
+              <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mx-auto">
+                <HelpCircle className="text-blue-600" size={24} />
+              </div>
+              <p className="text-sm font-bold text-slate-700">进度说明</p>
+              <div className="text-xs text-slate-500 leading-relaxed text-left space-y-2">
+                <p>当前时间进度比例约为 <span className="font-bold text-blue-600">26.6%</span>。</p>
+                <p>若赔付进度比例超过此数值，进度条将显示为红色。</p>
+                <p>部分金额无上限，因此无赔付进度比例。</p>
+              </div>
+            </div>
+            <div className="px-4 py-3 border-t border-slate-100 flex justify-end bg-slate-50">
+              <button 
+                onClick={() => setIsProgressHelpModalOpen(false)}
+                className="px-4 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-sm hover:bg-blue-700 transition-colors"
+              >
+                知道了
+              </button>
             </div>
           </div>
         </div>

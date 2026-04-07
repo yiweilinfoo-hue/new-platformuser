@@ -11,11 +11,18 @@ export enum ViewType {
   DISTRIBUTION = "分拨区",
 }
 
+export enum BusinessCategory {
+  COLLECTION_DELIVERY = "平台收派",
+  OPERATION_SAP = "平台运作SAP",
+  OPERATION_PMP = "平台运作PMP",
+}
+
 export interface RegionalData {
   id: number;
   regionCode: string;
   regionName: string;
   scenario: Scenario;
+  businessCategory: BusinessCategory;
   basePremium: number;
   baseLossRatio: number;
   extraCost: number;
@@ -28,37 +35,31 @@ export interface RegionalData {
   optimizationDirection: string;
 }
 
+export enum EventStatus {
+  COMPLETED = "已完结",
+  IN_PROGRESS = "未完结",
+}
+
 export interface Claim {
   id: string;
   regionCode: string;
-  serialNumber: string;
-  region: string;
-  branch: string;
+  businessCategory: BusinessCategory;
+  eventStatus: EventStatus;
   employeeId: string;
   name: string;
   personnelType: string;
-  outsourcingCompany: string;
+  costCenter: string;
   position: string;
+  supplierName: string;
   occurrenceTime: string;
-  hasSocialSecurity: boolean;
-  isWorkInjury: boolean;
-  anomalyDescription: string;
-  accidentLocation: string;
   anomalyCode: string;
-  anomalyLevel: string;
-  isDelayedReporting: boolean;
-  casualtyType: string;
-  isMarried: boolean;
-  childrenStatus: string;
-  parentsStatus: string;
-  socialSecurityPayout: number;
-  sapInsurancePayout: number;
-  pmpInsurancePayout: number;
-  otherInsurancePayout: number;
-  humanitarianAmount: number;
-  organizationBearingAmount: number;
-  supplierBearingAmount: number;
-  platformBearingAmount: number;
+  isWorkInjury: boolean;
+  totalPayout: number;
+  employerInsurancePayout: number;
+  medicalInsurancePayout: number;
+  platformPayout: number;
+  supplierPayout: number;
+  regionalPayout: number;
   statutoryPayoutStandard: number;
 }
 

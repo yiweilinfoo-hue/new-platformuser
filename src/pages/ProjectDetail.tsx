@@ -69,7 +69,7 @@ export const ProjectDetail: React.FC = () => {
             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">基础数据</h4>
             <div className="space-y-6">
               <div>
-                <p className="text-sm text-slate-400 font-bold mb-1">基础保费</p>
+                <p className="text-sm text-slate-400 font-bold mb-1">保险赔付</p>
                 <p className="text-2xl font-black text-slate-900">{formatCurrency(project.basePremium)}</p>
               </div>
               <div>
@@ -82,14 +82,6 @@ export const ProjectDetail: React.FC = () => {
           <div className="space-y-8">
             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">赔付明细</h4>
             <div className="space-y-4">
-              <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
-                <span className="text-sm font-bold text-slate-600">平台SAP赔付</span>
-                <span className="text-sm font-black text-slate-900">{formatCurrency(project.sapPayout)}</span>
-              </div>
-              <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
-                <span className="text-sm font-bold text-slate-600">平台PMP赔付</span>
-                <span className="text-sm font-black text-slate-900">{formatCurrency(project.pmpPayout)}</span>
-              </div>
               <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
                 <span className="text-sm font-bold text-slate-600">公司赔付</span>
                 <span className="text-sm font-black text-slate-900">{formatCurrency(project.companyPayout)}</span>
