@@ -33,6 +33,7 @@ import {
   LineChart,
   Line
 } from "recharts";
+import { motion, AnimatePresence } from "motion/react";
 import { Link } from "react-router-dom";
 import { MOCK_DATA, MOCK_CLAIMS } from "../constants";
 import { ViewType, Recommendation, BusinessCategory, EventStatus } from "../types";
@@ -46,13 +47,14 @@ export const Dashboard: React.FC = () => {
 
   const TIME_PROGRESS_RATIO = 0.266; // April 7th is ~26.6% of the year
 
-  const ProgressBar: React.FC<{ value: number; total: number; targetRatio?: number }> = ({ value, total, targetRatio = TIME_PROGRESS_RATIO }) => {
+  const ProgressBar: React.FC<{ value: number; total: number; targetRatio?: number; remainingLabel?: string }> = ({ value, total, targetRatio = TIME_PROGRESS_RATIO, remainingLabel }) => {
+    const [isHovered, setIsHovered] = useState(false);
     const ratio = total > 0 ? Math.min(1, value / total) : 0;
     const percentage = (ratio * 100).toFixed(1);
     
     return (
       <div className="mt-1 w-full max-w-[80px] mx-auto">
-        <div className="relative h-1 w-full bg-slate-100 rounded-full overflow-hidden">
+        <div className="relative h-1 w-full bg-slate-100 rounded-full">
           <div 
             className={cn(
               "absolute top-0 left-0 h-full rounded-full transition-all duration-500",
@@ -62,13 +64,38 @@ export const Dashboard: React.FC = () => {
           />
           {/* Target marker */}
           <div 
-            className="absolute top-0 h-full w-[1px] bg-slate-400 z-10"
+            className="absolute top-0 h-full w-[1px] bg-slate-400 z-10 cursor-help"
             style={{ left: `${targetRatio * 100}%` }}
-          />
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+          >
+            <AnimatePresence>
+              {isHovered && (
+                <motion.div
+                  initial={{ opacity: 0, y: 5, x: "-50%" }}
+                  animate={{ opacity: 1, y: 0, x: "-50%" }}
+                  exit={{ opacity: 0, y: 5, x: "-50%" }}
+                  className="absolute bottom-full mb-2 left-1/2 z-50 pointer-events-none"
+                >
+                  <div className="bg-slate-800 text-white text-[9px] px-2 py-1 rounded-sm shadow-lg whitespace-nowrap relative">
+                    <div className="font-bold">当前时间进度: {(targetRatio * 100).toFixed(1)}%</div>
+                    {/* Arrow */}
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
-        <div className="flex justify-between items-center mt-0.5">
-          <span className="text-[7px] text-slate-400 font-mono leading-none">{percentage}%</span>
-          <span className="text-[7px] text-slate-400 font-mono leading-none">目标: {(targetRatio * 100).toFixed(1)}%</span>
+        <div className="flex flex-col mt-0.5">
+          <div className="flex justify-between items-center w-full">
+            <span className="text-[7px] text-slate-400 font-mono leading-none">进度: {percentage}%</span>
+          </div>
+          {remainingLabel && (
+            <div className="text-[7px] text-slate-400 font-mono leading-none mt-0.5 text-left truncate">
+              剩余: {remainingLabel}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -314,7 +341,11 @@ export const Dashboard: React.FC = () => {
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center">
                         <div className="text-xs font-bold text-blue-600">{formatCurrency(stats.totalBasePayout * 0.4 * 0.8)}</div>
-                        <ProgressBar value={stats.totalBasePayout * 0.4 * 0.8} total={stats.totalPremium * 0.4 * 0.8 * 1.2} />
+                        <ProgressBar 
+                          value={stats.totalBasePayout * 0.4 * 0.8} 
+                          total={stats.totalPremium * 0.4 * 0.8 * 1.2} 
+                          remainingLabel={formatCurrency(Math.max(0, stats.totalPremium * 0.4 * 0.8 * 1.2 - stats.totalBasePayout * 0.4 * 0.8))}
+                        />
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center">
                         <div className="text-xs font-bold text-blue-600">{formatCurrency(stats.totalBasePayout * 0.4 * 0.2)}</div>
@@ -336,18 +367,30 @@ export const Dashboard: React.FC = () => {
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center">
                         <div className="text-xs font-bold text-blue-600">{formatCurrency(stats.totalBasePayout * 0.3 * 0.8)}</div>
-                        <ProgressBar value={stats.totalBasePayout * 0.3 * 0.8} total={stats.totalPremium * 0.3 * 0.8 * 1.2} />
+                        <ProgressBar 
+                          value={stats.totalBasePayout * 0.3 * 0.8} 
+                          total={stats.totalPremium * 0.3 * 0.8 * 1.2} 
+                          remainingLabel={formatCurrency(Math.max(0, stats.totalPremium * 0.3 * 0.8 * 1.2 - stats.totalBasePayout * 0.3 * 0.8))}
+                        />
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center">
                         <div className="text-xs font-bold text-blue-600">{formatCurrency(stats.totalBasePayout * 0.3 * 0.2)}</div>
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center">
                         <div className="text-xs font-bold text-purple-600">{formatCurrency(stats.totalCompanyPayout * 0.3)}</div>
-                        <ProgressBar value={stats.totalCompanyPayout * 0.3} total={stats.totalPremium * 0.3 * 0.5} />
+                        <ProgressBar 
+                          value={stats.totalCompanyPayout * 0.3} 
+                          total={stats.totalPremium * 0.3 * 0.5} 
+                          remainingLabel={formatCurrency(Math.max(0, stats.totalPremium * 0.3 * 0.5 - stats.totalCompanyPayout * 0.3))}
+                        />
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center">
                         <div className="text-xs font-bold text-purple-600">{formatCurrency(stats.totalSupplierPayout * 0.3)}</div>
-                        <ProgressBar value={stats.totalSupplierPayout * 0.3} total={stats.totalPremium * 0.3 * 0.5} />
+                        <ProgressBar 
+                          value={stats.totalSupplierPayout * 0.3} 
+                          total={stats.totalPremium * 0.3 * 0.5} 
+                          remainingLabel={formatCurrency(Math.max(0, stats.totalPremium * 0.3 * 0.5 - stats.totalSupplierPayout * 0.3))}
+                        />
                       </td>
                       <td className="p-4 text-center">
                         <div className="text-xs font-bold text-slate-900">{formatCurrency(stats.totalRegionalPayout * 0.3)}</div>
@@ -366,11 +409,19 @@ export const Dashboard: React.FC = () => {
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center bg-slate-50/5">
                         <div className="text-xs font-bold text-purple-600">{formatCurrency(stats.totalCompanyPayout * 0.3)}</div>
-                        <ProgressBar value={stats.totalCompanyPayout * 0.3} total={stats.totalPremium * 0.3 * 0.5} />
+                        <ProgressBar 
+                          value={stats.totalCompanyPayout * 0.3} 
+                          total={stats.totalPremium * 0.3 * 0.5} 
+                          remainingLabel={formatCurrency(Math.max(0, stats.totalPremium * 0.3 * 0.5 - stats.totalCompanyPayout * 0.3))}
+                        />
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center bg-slate-50/5">
                         <div className="text-xs font-bold text-purple-600">{formatCurrency(stats.totalSupplierPayout * 0.3)}</div>
-                        <ProgressBar value={stats.totalSupplierPayout * 0.3} total={stats.totalPremium * 0.3 * 0.5} />
+                        <ProgressBar 
+                          value={stats.totalSupplierPayout * 0.3} 
+                          total={stats.totalPremium * 0.3 * 0.5} 
+                          remainingLabel={formatCurrency(Math.max(0, stats.totalPremium * 0.3 * 0.5 - stats.totalSupplierPayout * 0.3))}
+                        />
                       </td>
                       <td className="p-4 text-center bg-slate-50/5">
                         <div className="text-xs font-bold text-slate-900">{formatCurrency(stats.totalRegionalPayout * 0.3)}</div>
@@ -487,7 +538,11 @@ export const Dashboard: React.FC = () => {
                             {formatCurrency(basePayoutCapped * 0.8)}
                           </span>
                           {showEmployerProgress && (
-                            <ProgressBar value={baseUsageRate * 0.8} total={100} />
+                            <ProgressBar 
+                              value={baseUsageRate * 0.8} 
+                              total={100} 
+                              remainingLabel={formatCurrency(Math.max(0, item.basePremium * 0.8 - basePayoutCapped * 0.8))}
+                            />
                           )}
                         </div>
                       </td>
@@ -504,7 +559,11 @@ export const Dashboard: React.FC = () => {
                             {formatCurrency(item.supplierPayout)}
                           </span>
                           {showSupplierProgress && (
-                            <ProgressBar value={supplierRate} total={100} />
+                            <ProgressBar 
+                              value={supplierRate} 
+                              total={100} 
+                              remainingLabel={formatCurrency(Math.max(0, item.basePremium - item.supplierPayout))}
+                            />
                           )}
                         </div>
                       </td>
@@ -514,7 +573,11 @@ export const Dashboard: React.FC = () => {
                             {formatCurrency(item.companyPayout)}
                           </span>
                           {showPlatformProgress && (
-                            <ProgressBar value={platformRate} total={100} />
+                            <ProgressBar 
+                              value={platformRate} 
+                              total={100} 
+                              remainingLabel={formatCurrency(Math.max(0, item.basePremium - item.companyPayout))}
+                            />
                           )}
                         </div>
                       </td>
