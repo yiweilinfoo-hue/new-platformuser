@@ -46,6 +46,34 @@ export const Dashboard: React.FC = () => {
 
   const TIME_PROGRESS_RATIO = 0.266; // April 7th is ~26.6% of the year
 
+  const ProgressBar: React.FC<{ value: number; total: number; targetRatio?: number }> = ({ value, total, targetRatio = TIME_PROGRESS_RATIO }) => {
+    const ratio = total > 0 ? Math.min(1, value / total) : 0;
+    const percentage = (ratio * 100).toFixed(1);
+    
+    return (
+      <div className="mt-1 w-full max-w-[80px] mx-auto">
+        <div className="relative h-1 w-full bg-slate-100 rounded-full overflow-hidden">
+          <div 
+            className={cn(
+              "absolute top-0 left-0 h-full rounded-full transition-all duration-500",
+              ratio > targetRatio ? "bg-red-500" : "bg-blue-500"
+            )}
+            style={{ width: `${ratio * 100}%` }}
+          />
+          {/* Target marker */}
+          <div 
+            className="absolute top-0 h-full w-[1px] bg-slate-400 z-10"
+            style={{ left: `${targetRatio * 100}%` }}
+          />
+        </div>
+        <div className="flex justify-between items-center mt-0.5">
+          <span className="text-[7px] text-slate-400 font-mono leading-none">{percentage}%</span>
+          <span className="text-[7px] text-slate-400 font-mono leading-none">目标: {(targetRatio * 100).toFixed(1)}%</span>
+        </div>
+      </div>
+    );
+  };
+
   const currentOrgData = useMemo(() => {
     if (viewType === ViewType.GROUP || !currentOrg) return null;
     return MOCK_DATA.find(item => currentOrg.includes(item.regionName) || item.regionName.includes(currentOrg));
@@ -246,10 +274,20 @@ export const Dashboard: React.FC = () => {
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">案件</span>
                       </th>
                       <th colSpan={2} className="p-3 text-center border-r border-slate-100 bg-blue-50/30">
-                        <span className="text-[11px] font-bold text-blue-700 uppercase tracking-widest">保险赔付</span>
+                        <div className="flex items-center justify-center gap-1">
+                          <span className="text-[11px] font-bold text-blue-700 uppercase tracking-widest">保险赔付</span>
+                          <button onClick={() => setIsProgressHelpModalOpen(true)} className="text-blue-300 hover:text-blue-500">
+                            <HelpCircle size={12} />
+                          </button>
+                        </div>
                       </th>
                       <th colSpan={2} className="p-3 text-center border-r border-slate-100 bg-purple-50/30">
-                        <span className="text-[11px] font-bold text-purple-700 uppercase tracking-widest">第三方赔付</span>
+                        <div className="flex items-center justify-center gap-1">
+                          <span className="text-[11px] font-bold text-purple-700 uppercase tracking-widest">第三方赔付</span>
+                          <button onClick={() => setIsProgressHelpModalOpen(true)} className="text-purple-300 hover:text-purple-500">
+                            <HelpCircle size={12} />
+                          </button>
+                        </div>
                       </th>
                       <th className="p-3 text-center bg-amber-50/30">
                         <span className="text-[11px] font-bold text-amber-600 uppercase tracking-widest">地区赔付</span>
@@ -272,6 +310,7 @@ export const Dashboard: React.FC = () => {
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center">
                         <div className="text-xs font-bold text-blue-600">{formatCurrency(stats.totalBasePayout * 0.4 * 0.8)}</div>
+                        <ProgressBar value={stats.totalBasePayout * 0.4 * 0.8} total={stats.totalPremium * 0.4 * 0.8 * 1.2} />
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center">
                         <div className="text-xs font-bold text-blue-600">{formatCurrency(stats.totalBasePayout * 0.4 * 0.2)}</div>
@@ -293,15 +332,18 @@ export const Dashboard: React.FC = () => {
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center">
                         <div className="text-xs font-bold text-blue-600">{formatCurrency(stats.totalBasePayout * 0.3 * 0.8)}</div>
+                        <ProgressBar value={stats.totalBasePayout * 0.3 * 0.8} total={stats.totalPremium * 0.3 * 0.8 * 1.2} />
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center">
                         <div className="text-xs font-bold text-blue-600">{formatCurrency(stats.totalBasePayout * 0.3 * 0.2)}</div>
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center">
                         <div className="text-xs font-bold text-purple-600">{formatCurrency(stats.totalCompanyPayout * 0.3)}</div>
+                        <ProgressBar value={stats.totalCompanyPayout * 0.3} total={stats.totalPremium * 0.3 * 0.5} />
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center">
                         <div className="text-xs font-bold text-purple-600">{formatCurrency(stats.totalSupplierPayout * 0.3)}</div>
+                        <ProgressBar value={stats.totalSupplierPayout * 0.3} total={stats.totalPremium * 0.3 * 0.5} />
                       </td>
                       <td className="p-4 text-center">
                         <div className="text-xs font-bold text-slate-900">{formatCurrency(stats.totalRegionalPayout * 0.3)}</div>
@@ -320,9 +362,11 @@ export const Dashboard: React.FC = () => {
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center bg-slate-50/5">
                         <div className="text-xs font-bold text-purple-600">{formatCurrency(stats.totalCompanyPayout * 0.3)}</div>
+                        <ProgressBar value={stats.totalCompanyPayout * 0.3} total={stats.totalPremium * 0.3 * 0.5} />
                       </td>
                       <td className="p-4 border-r border-slate-100 text-center bg-slate-50/5">
                         <div className="text-xs font-bold text-purple-600">{formatCurrency(stats.totalSupplierPayout * 0.3)}</div>
+                        <ProgressBar value={stats.totalSupplierPayout * 0.3} total={stats.totalPremium * 0.3 * 0.5} />
                       </td>
                       <td className="p-4 text-center bg-slate-50/5">
                         <div className="text-xs font-bold text-slate-900">{formatCurrency(stats.totalRegionalPayout * 0.3)}</div>
@@ -439,23 +483,7 @@ export const Dashboard: React.FC = () => {
                             {formatCurrency(basePayoutCapped * 0.8)}
                           </span>
                           {showEmployerProgress && (
-                            <>
-                              <div className="flex items-center gap-1">
-                                <span className="text-[8px] font-bold text-slate-400">{(baseUsageRate * 0.8).toFixed(0)}%</span>
-                                <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
-                                  <div 
-                                    className={cn(
-                                      "h-full",
-                                      (baseUsageRate * 0.8 / 100) > TIME_PROGRESS_RATIO ? "bg-red-500" : "bg-blue-500"
-                                    )}
-                                    style={{ width: `${baseUsageRate * 0.8}%` }}
-                                  />
-                                </div>
-                              </div>
-                              <div className="text-[8px] text-slate-400">
-                                剩余额度: {formatCurrency(Math.max(0, item.basePremium * 0.8 - basePayoutCapped * 0.8))}
-                              </div>
-                            </>
+                            <ProgressBar value={baseUsageRate * 0.8} total={100} />
                           )}
                         </div>
                       </td>
@@ -472,23 +500,7 @@ export const Dashboard: React.FC = () => {
                             {formatCurrency(item.supplierPayout)}
                           </span>
                           {showSupplierProgress && (
-                            <>
-                              <div className="flex items-center gap-1">
-                                <span className="text-[8px] font-bold text-slate-400">{supplierRate.toFixed(0)}%</span>
-                                <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
-                                  <div 
-                                    className={cn(
-                                      "h-full",
-                                      (supplierRate / 100) > TIME_PROGRESS_RATIO ? "bg-red-500" : "bg-purple-500"
-                                    )}
-                                    style={{ width: `${supplierRate}%` }}
-                                  />
-                                </div>
-                              </div>
-                              <div className="text-[8px] text-slate-400">
-                                剩余额度: {formatCurrency(Math.max(0, item.basePremium - item.supplierPayout))}
-                              </div>
-                            </>
+                            <ProgressBar value={supplierRate} total={100} />
                           )}
                         </div>
                       </td>
@@ -498,23 +510,7 @@ export const Dashboard: React.FC = () => {
                             {formatCurrency(item.companyPayout)}
                           </span>
                           {showPlatformProgress && (
-                            <>
-                              <div className="flex items-center gap-1">
-                                <span className="text-[8px] font-bold text-slate-400">{platformRate.toFixed(0)}%</span>
-                                <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
-                                  <div 
-                                    className={cn(
-                                      "h-full",
-                                      (platformRate / 100) > TIME_PROGRESS_RATIO ? "bg-red-500" : "bg-purple-500"
-                                    )}
-                                    style={{ width: `${platformRate}%` }}
-                                  />
-                                </div>
-                              </div>
-                              <div className="text-[8px] text-slate-400">
-                                剩余额度: {formatCurrency(Math.max(0, item.basePremium - item.companyPayout))}
-                              </div>
-                            </>
+                            <ProgressBar value={platformRate} total={100} />
                           )}
                         </div>
                       </td>
@@ -703,7 +699,8 @@ export const Dashboard: React.FC = () => {
               <p className="text-sm font-bold text-slate-700">进度说明</p>
               <div className="text-xs text-slate-500 leading-relaxed text-left space-y-2">
                 <p>当前时间进度比例约为 <span className="font-bold text-blue-600">26.6%</span>。</p>
-                <p>若赔付进度比例超过此数值，进度条将显示为红色。</p>
+                <p>进度条中的<span className="font-bold text-slate-400">竖线</span>代表当前时间进度节点。</p>
+                <p>若赔付进度比例超过此数值，进度条将显示为红色，否则显示为蓝色。</p>
                 <p>部分金额无上限，因此无赔付进度比例。</p>
               </div>
             </div>
