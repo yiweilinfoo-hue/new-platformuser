@@ -219,15 +219,19 @@ export const Dashboard: React.FC = () => {
           <span className="text-sm font-bold">管理要点</span>
         </div>
         <div className="p-4 text-[11px] text-slate-600 leading-relaxed">
-          <div className="font-bold mb-2 text-slate-800">模型设计逻辑：</div>
-          <div className="space-y-1">
-            <div className="font-bold">1、用工风控动态预警</div>
-            <div className="pl-2">① 满期赔付率超过90%，需要追加保费至？+保险服务费(折算成月份看赔付达成结果)</div>
-            <div className="pl-2">② 保险外风险成本分摊规则，地区无责任情况下，平台及供应商5:5承担，地区主观因素责任地区承担50%，平台及供应商25%：25%</div>
-            <div className="pl-2">③ 平台和供应商的风险应对金上限为上年度推广服务费的50%/100%</div>
-            <div className="pl-2">④ 按工伤保险赔付标准测算赔付金额，法定标准外测算结果和实际赔付结果的对比</div>
-            <div className="pl-2">⑤ 未发生案件按照法定标准测算风险应对金，动态输出地区风险成本，评估是否增加杠杆型保险</div>
-            <div className="pl-2">⑥ 杠杆型保险方案测算，预警风险成本及保费投入费率对比，确定建议增投方案</div>
+          <div className="space-y-3">
+            <div>
+              <div className="font-bold text-slate-800 mb-0.5">① 赔付动态监控与风险分摊预警</div>
+              <div className="pl-4">提供动态监控工具，实时追踪赔付支出，识别风险失衡节点，辅助地区进行风险管控决策</div>
+            </div>
+            <div>
+              <div className="font-bold text-slate-800 mb-0.5">② 风险准备金测算</div>
+              <div className="pl-4">提供法定标准测算工具，辅助各地区对未完结风险事件做风险应对准备</div>
+            </div>
+            <div>
+              <div className="font-bold text-slate-800 mb-0.5">③ 保险方案对比分析</div>
+              <div className="pl-4">输出保费与风险成本对比分析工具，辅助地区判断是否需要增投商业保险，支撑地区自主决策</div>
+            </div>
           </div>
         </div>
       </div>
